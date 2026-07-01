@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 // ---------------------------------------------------------------------------
 // Configuration — from plugin userConfig (CLAUDE_PLUGIN_OPTION_*), with
@@ -63,38 +63,6 @@ const NOW = new Date();
 const TODAY_ISO = isoDay(NOW);
 const TODAY_COMPACT = TODAY_ISO.replaceAll("-", "");
 const MONTH_START_COMPACT = `${NOW.getFullYear()}${String(NOW.getMonth() + 1).padStart(2, "0")}01`;
-
-// ---------------------------------------------------------------------------
-// Native OS notification — some hosts don't render a blocked hook's stderr
-// at all, so this gives a signal that doesn't depend on the host.
-// ---------------------------------------------------------------------------
-function notifyOS(title, body) {
-  try {
-    let cmd, args;
-    if (process.platform === "darwin") {
-      // display notification requires Notification Center authorization that this
-      // process chain doesn't have; display dialog is a plain window, no such gate.
-      const script =
-        `display dialog ${JSON.stringify(body)} with title ${JSON.stringify(title)} ` +
-        `buttons {"OK"} default button "OK" giving up after 10`;
-      cmd = "osascript";
-      args = ["-e", script];
-    } else if (process.platform === "linux") {
-      cmd = "notify-send";
-      args = [title, body];
-    } else if (process.platform === "win32") {
-      const esc = (s) => s.replace(/'/g, "''");
-      const ps =
-        `Add-Type -AssemblyName System.Windows.Forms; ` +
-        `[System.Windows.Forms.MessageBox]::Show('${esc(body)}', '${esc(title)}')`;
-      cmd = "powershell.exe";
-      args = ["-NoProfile", "-Command", ps];
-    } else {
-      return;
-    }
-    spawn(cmd, args, { detached: true, stdio: "ignore" }).unref();
-  } catch { /* best-effort only */ }
-}
 
 // ---------------------------------------------------------------------------
 // ccusage invocation — prefer a ccusage on PATH, else `npx -y <spec>`.
@@ -203,11 +171,25 @@ function modeGate() {
       `Month-to-date: ${usd(mtd)} of ${usd(MONTHLY_TARGET)} target (${mpct.toFixed(0)}%).\n` +
       `To continue anyway today: create the file ${overrideFile}  (or set COST_GUARD_OVERRIDE=1).\n` +
       `To change limits or switch to warn-only, reconfigure the cost-guard plugin (hard_block=false).`;
-    notifyOS(
-      "Cost Guard — Blocked",
-      `Budget reached, prompt blocked. Today: ${usd(today)} of ${usd(DAILY_BUDGET)} daily budget (${dpct.toFixed(0)}%). ` +
-        `Month-to-date: ${usd(mtd)} of ${usd(MONTHLY_TARGET)} target (${mpct.toFixed(0)}%).`
-    );
+
+    // First time over budget today: let it through once with instructions for
+    // Claude to relay the situation itself, since that renders on every host
+    // (a hook's own stderr doesn't, e.g. in the VS Code extension). Every
+    // prompt after that is silently blocked for the rest of the day.
+    const warnedFile = path.join(DATA_DIR, `.warned-${TODAY_ISO}`);
+    if (!safeExists(warnedFile)) {
+      try { fs.writeFileSync(warnedFile, ""); } catch { /* ignore */ }
+      const ctx =
+        `Cost Guard: budget reached for today. ${reason}\n\n` +
+        `This is a one-time pass-through. Before addressing the user's request, tell them clearly ` +
+        `that they've hit their Claude Code budget, quoting the figures above, and ask how they'd ` +
+        `like to proceed. Do not fulfill their original request in this turn. Every prompt after ` +
+        `this one will be silently blocked for the rest of today, until the budget resets tomorrow ` +
+        `or they override.`;
+      process.stdout.write(JSON.stringify({ additionalContext: ctx }));
+      return process.exit(0);
+    }
+
     process.stderr.write(reason);
     return process.exit(2);
   }
