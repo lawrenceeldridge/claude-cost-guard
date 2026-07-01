@@ -82,6 +82,13 @@ function notifyOS(title, body) {
     } else if (process.platform === "linux") {
       cmd = "notify-send";
       args = [title, body];
+    } else if (process.platform === "win32") {
+      const esc = (s) => s.replace(/'/g, "''");
+      const ps =
+        `Add-Type -AssemblyName System.Windows.Forms; ` +
+        `[System.Windows.Forms.MessageBox]::Show('${esc(body)}', '${esc(title)}')`;
+      cmd = "powershell.exe";
+      args = ["-NoProfile", "-Command", ps];
     } else {
       return;
     }
