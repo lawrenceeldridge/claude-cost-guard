@@ -130,6 +130,10 @@ function flagFor(dpct, mpct) {
   if (dpct >= WARN_PCT || mpct >= WARN_PCT) return "⚠️";
   return "🟢";
 }
+// Trim the ccusage model id for display: claude-sonnet-4-5-20250929 -> sonnet-4-5.
+function shortModel(name) {
+  return String(name || "?").replace(/^claude-/, "").replace(/-\d{8}$/, "");
+}
 
 // ---------------------------------------------------------------------------
 // Modes
@@ -232,6 +236,19 @@ function modeReport() {
   L.push(`  Avg per active day     : ${usd(avgActive)}`);
   L.push(`  Projected month total  : ${usd(projMonth)}  (${pct(projMonth, MONTHLY_TARGET).toFixed(0)}% of target, calendar run-rate)`);
   L.push(`  Verdict                : ${projMonth <= MONTHLY_TARGET ? "on track" : "OVER — ease off or the month lands above target"}`);
+  L.push(`  ${sep}`);
+  const todayModels = ((rows.find((r) => r.period === TODAY_ISO) || {}).modelBreakdowns || [])
+    .map((m) => ({ name: shortModel(m.modelName), cost: num(m.cost, 0) }))
+    .sort((a, b) => b.cost - a.cost);
+  L.push("  By model today:");
+  if (todayModels.length) {
+    for (const m of todayModels) {
+      const p = pct(m.cost, today);
+      L.push(`    ${m.name.padEnd(16)} ${pad(usd(m.cost))}  ${bar(p)} ${p.toFixed(0).padStart(3)}%`);
+    }
+  } else {
+    L.push("    (no usage yet today)");
+  }
   L.push(`  ${sep}`);
   L.push("  Last 7 days:");
   for (const r of rows.slice(-7)) {
