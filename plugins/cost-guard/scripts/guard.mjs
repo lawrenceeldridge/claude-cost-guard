@@ -171,8 +171,8 @@ function modeGate() {
       `Month-to-date: ${usd(mtd)} of ${usd(MONTHLY_TARGET)} target (${mpct.toFixed(0)}%).\n` +
       `To continue anyway today: create the file ${overrideFile}  (or set COST_GUARD_OVERRIDE=1).\n` +
       `To change limits or switch to warn-only, reconfigure the cost-guard plugin (hard_block=false).`;
-    process.stdout.write(JSON.stringify({ decision: "block", reason }));
-    return process.exit(0);
+    process.stderr.write(reason);
+    return process.exit(2);
   }
 
   if (dpct >= WARN_PCT || mpct >= WARN_PCT) {
