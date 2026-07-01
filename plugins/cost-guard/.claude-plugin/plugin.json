@@ -1,0 +1,50 @@
+{
+  "name": "cost-guard",
+  "displayName": "Cost Guard",
+  "version": "0.1.0",
+  "description": "Daily and monthly spend guard for Claude Code. Blocks prompts once you exceed your budget and shows a live burn status line. Powered by ccusage over your local transcripts — no API key, no network beyond ccusage, no telemetry.",
+  "author": {
+    "name": "Lawrence Eldridge"
+  },
+  "license": "MIT",
+  "keywords": ["cost", "budget", "spend", "ccusage", "guardrail", "hooks", "finops"],
+  "hooks": "./hooks/hooks.json",
+  "userConfig": {
+    "monthly_target": {
+      "type": "number",
+      "title": "Monthly budget (USD)",
+      "description": "Target monthly spend. Prompts are blocked once month-to-date reaches this.",
+      "default": 4000,
+      "min": 1
+    },
+    "working_days_per_month": {
+      "type": "number",
+      "title": "Working days per month",
+      "description": "Daily budget = monthly budget / this. Use 30 for calendar-day pacing, ~21 for working days.",
+      "default": 21,
+      "min": 1,
+      "max": 31
+    },
+    "warn_pct": {
+      "type": "number",
+      "title": "Warn threshold (%)",
+      "description": "The status line turns amber once today's spend passes this percent of the daily budget.",
+      "default": 80,
+      "min": 1,
+      "max": 100
+    },
+    "hard_block": {
+      "type": "boolean",
+      "title": "Block when over budget",
+      "description": "On = block prompts once over budget. Off = warn only, never block.",
+      "default": true
+    },
+    "cache_ttl": {
+      "type": "number",
+      "title": "Cache TTL (seconds)",
+      "description": "How long to cache ccusage results between recomputations, so transcripts are not rescanned on every prompt.",
+      "default": 120,
+      "min": 10
+    }
+  }
+}

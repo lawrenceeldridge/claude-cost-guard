@@ -1,0 +1,12 @@
+{
+  "name": "claude-cost-guard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Claude Code plugin that guards daily and monthly spend using ccusage.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["claude-code", "plugin", "ccusage", "cost", "budget"]
+}

@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+# Cost Guard runtime state (never belongs in the repo — lives in CLAUDE_PLUGIN_DATA at runtime)
+cache.json
+.override-*

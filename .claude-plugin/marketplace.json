@@ -1,0 +1,17 @@
+{
+  "name": "cost-guard",
+  "owner": {
+    "name": "Lawrence Eldridge"
+  },
+  "metadata": {
+    "description": "Marketplace hosting the Cost Guard plugin for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "cost-guard",
+      "source": "./plugins/cost-guard",
+      "description": "Daily and monthly spend guard for Claude Code: blocks over-budget prompts and shows a live burn status line, powered by ccusage.",
+      "version": "0.1.0"
+    }
+  ]
+}
