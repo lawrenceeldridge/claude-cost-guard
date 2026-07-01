@@ -195,12 +195,23 @@ function modeGate() {
   }
 
   if (dpct >= WARN_PCT || mpct >= WARN_PCT) {
-    const ctx =
-      `Cost Guard notice: today's Claude Code spend is ${usd(today)} ` +
-      `(${dpct.toFixed(0)}% of the ${usd(DAILY_BUDGET)}/day budget); ` +
-      `month-to-date ${usd(mtd)} / ${usd(MONTHLY_TARGET)}. Approaching the limit — be economical.`;
-    process.stdout.write(JSON.stringify({ additionalContext: ctx }));
-    return process.exit(0);
+    // Announce once per day when first crossing the warn threshold, then stay
+    // quiet — repeating this on every prompt for the rest of the day would be
+    // noise, unlike the hard-block case where repeating it is the point.
+    const warnedApproachingFile = path.join(DATA_DIR, `.warned-approaching-${TODAY_ISO}`);
+    if (!safeExists(warnedApproachingFile)) {
+      try { fs.writeFileSync(warnedApproachingFile, ""); } catch { /* ignore */ }
+      const ctx =
+        `Cost Guard: approaching budget. Today's Claude Code spend is ${usd(today)} ` +
+        `(${dpct.toFixed(0)}% of the ${usd(DAILY_BUDGET)}/day budget); ` +
+        `month-to-date ${usd(mtd)} / ${usd(MONTHLY_TARGET)}.\n\n` +
+        `Mention this briefly to the user (a short aside is enough) before or alongside addressing ` +
+        `their request, then proceed normally — this is a heads-up, not a block. Be economical for ` +
+        `the rest of today.`;
+      process.stdout.write(JSON.stringify({ additionalContext: ctx }));
+      return process.exit(0);
+    }
+    return allow();
   }
   return allow();
 }
