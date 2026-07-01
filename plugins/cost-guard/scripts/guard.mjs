@@ -125,6 +125,11 @@ function readStdin() {
 
 const pct = (val, of) => (of > 0 ? (val / of) * 100 : 0);
 const usd = (n) => `$${n.toFixed(2)}`;
+function flagFor(dpct, mpct) {
+  if (dpct >= 100 || mpct >= 100) return "🛑";
+  if (dpct >= WARN_PCT || mpct >= WARN_PCT) return "⚠️";
+  return "🟢";
+}
 
 // ---------------------------------------------------------------------------
 // Modes
@@ -174,13 +179,23 @@ function modeStatusline() {
   const { today, mtd } = compute();
   const dpct = pct(today, DAILY_BUDGET);
   const mpct = pct(mtd, MONTHLY_TARGET);
-  let flag = "🟢";
-  if (dpct >= 100 || mpct >= 100) flag = "🛑";
-  else if (dpct >= WARN_PCT || mpct >= WARN_PCT) flag = "⚠️";
+  const flag = flagFor(dpct, mpct);
 
   process.stdout.write(
     `${flag} [${model}] sess ${usd(sess)} · ` +
     `today ${usd(today)}/$${DAILY_BUDGET.toFixed(0)} (${dpct.toFixed(0)}%) · ` +
+    `month $${mtd.toFixed(0)}/$${MONTHLY_TARGET.toFixed(0)} (${mpct.toFixed(0)}%)\n`
+  );
+  process.exit(0);
+}
+
+// Compact one-line snapshot with no session context (for the /cost-guard:status command).
+function modeSnapshot() {
+  const { today, mtd } = compute();
+  const dpct = pct(today, DAILY_BUDGET);
+  const mpct = pct(mtd, MONTHLY_TARGET);
+  process.stdout.write(
+    `${flagFor(dpct, mpct)} today ${usd(today)}/$${DAILY_BUDGET.toFixed(0)} (${dpct.toFixed(0)}%) · ` +
     `month $${mtd.toFixed(0)}/$${MONTHLY_TARGET.toFixed(0)} (${mpct.toFixed(0)}%)\n`
   );
   process.exit(0);
@@ -236,8 +251,9 @@ const mode = (process.argv[2] || "gate").toLowerCase();
 try {
   if (mode === "gate") modeGate();
   else if (mode === "statusline") modeStatusline();
+  else if (mode === "snapshot") modeSnapshot();
   else if (mode === "report") modeReport();
-  else { process.stderr.write(`cost-guard: unknown mode '${mode}' (use gate|statusline|report)\n`); process.exit(2); }
+  else { process.stderr.write(`cost-guard: unknown mode '${mode}' (use gate|statusline|snapshot|report)\n`); process.exit(2); }
 } catch (err) {
   // Absolute fail-open backstop: never block, never crash the caller.
   try { process.stderr.write(`cost-guard: ${err?.message || err}\n`); } catch { /* ignore */ }
