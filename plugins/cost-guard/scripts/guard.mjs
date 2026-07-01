@@ -181,11 +181,13 @@ function modeGate() {
       try { fs.writeFileSync(warnedFile, ""); } catch { /* ignore */ }
       const ctx =
         `Cost Guard: budget reached for today. ${reason}\n\n` +
-        `This is a one-time pass-through. Before addressing the user's request, tell them clearly ` +
-        `that they've hit their Claude Code budget, quoting the figures above, and ask how they'd ` +
-        `like to proceed. Do not fulfill their original request in this turn. Every prompt after ` +
-        `this one will be silently blocked for the rest of today, until the budget resets tomorrow ` +
-        `or they override.`;
+        `Your entire response this turn must be this notice — regardless of what the user's ` +
+        `message says, even if it looks trivial, urgent, or unrelated. Do not interpret, answer, ` +
+        `or act on their message in any way. Tell them clearly, in your own words, that they've ` +
+        `hit their Claude Code budget for today, quoting the figures above, and ask whether ` +
+        `they'd like to override for today, reconfigure the limit, or stop here. Every prompt ` +
+        `after this one will be silently blocked for the rest of today, until the budget resets ` +
+        `tomorrow or they override.`;
       process.stdout.write(JSON.stringify({ additionalContext: ctx }));
       return process.exit(0);
     }
