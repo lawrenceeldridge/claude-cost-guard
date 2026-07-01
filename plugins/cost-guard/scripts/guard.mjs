@@ -135,6 +135,24 @@ function shortModel(name) {
   return String(name || "?").replace(/^claude-/, "").replace(/-\d{8}$/, "");
 }
 
+const ANSI = { reset: "\x1b[0m", dim: "\x1b[2m", green: "\x1b[32m", yellow: "\x1b[33m", red: "\x1b[31m", cyan: "\x1b[36m" };
+// Context-window convention: green < 70%, amber 70-89%, red 90%+.
+function ctxColor(p) { return p >= 90 ? ANSI.red : p >= 70 ? ANSI.yellow : ANSI.green; }
+// Budget convention: green under warn threshold, amber up to 99%, red at/over 100%.
+function budgetColor(dpct, mpct) {
+  if (dpct >= 100 || mpct >= 100) return ANSI.red;
+  if (dpct >= WARN_PCT || mpct >= WARN_PCT) return ANSI.yellow;
+  return ANSI.green;
+}
+function sbar(p, width = 10) {
+  const n = Math.max(0, Math.min(width, Math.round((num(p, 0) / 100) * width)));
+  return "█".repeat(n) + "░".repeat(width - n);
+}
+function fmtDur(ms) {
+  const s = Math.round(ms / 1000), m = Math.floor(s / 60), h = Math.floor(m / 60);
+  return h ? `${h}h${m % 60}m` : m ? `${m}m` : `${s}s`;
+}
+
 // ---------------------------------------------------------------------------
 // Modes
 // ---------------------------------------------------------------------------
@@ -173,23 +191,35 @@ function allow() { return process.exit(0); }
 function safeExists(p) { try { return fs.existsSync(p); } catch { return false; } }
 
 function modeStatusline() {
-  let model = "?", sess = 0;
+  let model = "?", sess = 0, durMs = 0, ctxPct = NaN, ctxSize = 0;
   try {
     const j = JSON.parse(readStdin());
     model = j?.model?.display_name ?? "?";
     sess = num(j?.cost?.total_cost_usd, 0);
+    durMs = num(j?.cost?.total_duration_ms, 0);
+    const cw = j?.context_window;
+    if (cw) { ctxPct = num(cw.used_percentage, NaN); ctxSize = num(cw.context_window_size, 0); }
   } catch { /* keep defaults */ }
 
   const { today, mtd } = compute();
   const dpct = pct(today, DAILY_BUDGET);
   const mpct = pct(mtd, MONTHLY_TARGET);
-  const flag = flagFor(dpct, mpct);
+  const dot = `${ANSI.dim}·${ANSI.reset}`;
 
-  process.stdout.write(
-    `${flag} [${model}] sess ${usd(sess)} · ` +
-    `today ${usd(today)}/$${DAILY_BUDGET.toFixed(0)} (${dpct.toFixed(0)}%) · ` +
-    `month $${mtd.toFixed(0)}/$${MONTHLY_TARGET.toFixed(0)} (${mpct.toFixed(0)}%)\n`
-  );
+  const line1 = [`${ANSI.cyan}[${model}]${ANSI.reset}`];
+  if (Number.isFinite(ctxPct)) {
+    const size = ctxSize >= 1e6 ? "1M" : ctxSize >= 1000 ? `${Math.round(ctxSize / 1000)}k` : String(ctxSize || "?");
+    line1.push(`🧠 ${ctxColor(ctxPct)}${sbar(ctxPct)} ${ctxPct.toFixed(0)}%${ANSI.reset} of ${size}`);
+  }
+  line1.push(usd(sess));
+  if (durMs) line1.push(fmtDur(durMs));
+
+  const bc = budgetColor(dpct, mpct);
+  const line2 =
+    `${flagFor(dpct, mpct)} today ${bc}${sbar(dpct)} ${usd(today)}/$${DAILY_BUDGET.toFixed(0)} (${dpct.toFixed(0)}%)${ANSI.reset} ` +
+    `${dot} month $${mtd.toFixed(0)}/$${MONTHLY_TARGET.toFixed(0)} (${mpct.toFixed(0)}%)`;
+
+  process.stdout.write(line1.join(` ${dot} `) + "\n" + line2 + "\n");
   process.exit(0);
 }
 
