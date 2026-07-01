@@ -263,6 +263,53 @@ function modeReport() {
 
 function pad(s) { return String(s).padStart(9); }
 
+function fmtMins(m) {
+  m = Math.max(0, Math.round(m));
+  const h = Math.floor(m / 60), mm = m % 60;
+  return h ? `${h}h ${mm}m` : `${mm}m`;
+}
+
+// Live burn "quote" from ccusage's active 5-hour block. Reports the current rate
+// (not a task total — Claude Code can't price a task before it runs).
+function modeQuote() {
+  let block = null;
+  try {
+    const d = JSON.parse(runCcusage(["blocks", "--active", "--json"]) || "{}");
+    block = (Array.isArray(d?.blocks) ? d.blocks : []).find((b) => b?.isActive) || null;
+  } catch { /* fail open below */ }
+
+  const sep = "-".repeat(54);
+  const L = ["", "  Cost Guard — quote (live burn, current 5-hour block)", `  ${sep}`];
+
+  if (!block) {
+    L.push("  No active session block yet — run a prompt, then check again.");
+  } else {
+    const spent = num(block.costUSD, 0);
+    const perHr = num(block?.burnRate?.costPerHour, 0);
+    const projTotal = num(block?.projection?.totalCost, 0);
+    const remainMin = num(block?.projection?.remainingMinutes, 0);
+    const models = (block.models || []).map(shortModel);
+    const onOpus = models.some((m) => m.startsWith("opus"));
+
+    L.push(`  Spent this block : ${usd(spent)}`);
+    L.push(`  Burn rate        : ~${usd(perHr)}/hr`);
+    if (projTotal) L.push(`  Projected        : ${usd(projTotal)} by block end (${fmtMins(remainMin)} left)`);
+    L.push(`  Models in use    : ${models.join(", ") || "—"}`);
+    L.push(`  ${sep}`);
+    L.push("  Before a big task:");
+    L.push("    Implementation / refactor   → consider /model sonnet (~60% cheaper per token)");
+    L.push("    Analysis / debugging / arch → Opus earns its cost");
+    if (onOpus) L.push("    You're on Opus now — a quick /model sonnet is worth it for coding.");
+  }
+
+  L.push(`  ${sep}`);
+  L.push("  Note: this is your current rate, not a task quote — Claude Code cannot");
+  L.push("  price a task before it runs (cost depends on how the model responds).");
+  L.push("");
+  process.stdout.write(L.join("\n") + "\n");
+  process.exit(0);
+}
+
 // ---------------------------------------------------------------------------
 const mode = (process.argv[2] || "gate").toLowerCase();
 try {
@@ -270,7 +317,8 @@ try {
   else if (mode === "statusline") modeStatusline();
   else if (mode === "snapshot") modeSnapshot();
   else if (mode === "report") modeReport();
-  else { process.stderr.write(`cost-guard: unknown mode '${mode}' (use gate|statusline|snapshot|report)\n`); process.exit(2); }
+  else if (mode === "quote") modeQuote();
+  else { process.stderr.write(`cost-guard: unknown mode '${mode}' (use gate|statusline|snapshot|report|quote)\n`); process.exit(2); }
 } catch (err) {
   // Absolute fail-open backstop: never block, never crash the caller.
   try { process.stderr.write(`cost-guard: ${err?.message || err}\n`); } catch { /* ignore */ }
