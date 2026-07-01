@@ -46,12 +46,12 @@ Claude Code plugins **cannot set the main status line** (a plugin may only contr
 {
   "statusLine": {
     "type": "command",
-    "command": "node \"$HOME/.claude/plugins/cache/cost-guard/plugins/cost-guard/scripts/guard.mjs\" statusline"
+    "command": "node \"$HOME/.claude/plugins/cache/cost-guard/cost-guard/<version>/scripts/guard.mjs\" statusline"
   }
 }
 ```
 
-The exact cache path is shown by `claude plugin details cost-guard`. The budget-block hook works with no manual step; only the status line is opt-in.
+The installed path is `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/scripts/guard.mjs` — it contains the version, so update it when the plugin updates. Run `claude plugin details cost-guard` to see the current path. The budget-block hook works with no manual step; only the status line is opt-in.
 
 ## When you are blocked
 
