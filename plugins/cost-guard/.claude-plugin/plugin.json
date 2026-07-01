@@ -8,7 +8,6 @@
   },
   "license": "MIT",
   "keywords": ["cost", "budget", "spend", "ccusage", "guardrail", "hooks", "finops"],
-  "hooks": "./hooks/hooks.json",
   "userConfig": {
     "monthly_target": {
       "type": "number",
