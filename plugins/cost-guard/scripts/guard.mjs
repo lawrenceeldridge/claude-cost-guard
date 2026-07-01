@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 // ---------------------------------------------------------------------------
 // Configuration — from plugin userConfig (CLAUDE_PLUGIN_OPTION_*), with
@@ -63,6 +63,31 @@ const NOW = new Date();
 const TODAY_ISO = isoDay(NOW);
 const TODAY_COMPACT = TODAY_ISO.replaceAll("-", "");
 const MONTH_START_COMPACT = `${NOW.getFullYear()}${String(NOW.getMonth() + 1).padStart(2, "0")}01`;
+
+// ---------------------------------------------------------------------------
+// Native OS notification — some hosts don't render a blocked hook's stderr
+// at all, so this gives a signal that doesn't depend on the host.
+// ---------------------------------------------------------------------------
+function notifyOS(title, body) {
+  try {
+    let cmd, args;
+    if (process.platform === "darwin") {
+      // display notification requires Notification Center authorization that this
+      // process chain doesn't have; display dialog is a plain window, no such gate.
+      const script =
+        `display dialog ${JSON.stringify(body)} with title ${JSON.stringify(title)} ` +
+        `buttons {"OK"} default button "OK" giving up after 10`;
+      cmd = "osascript";
+      args = ["-e", script];
+    } else if (process.platform === "linux") {
+      cmd = "notify-send";
+      args = [title, body];
+    } else {
+      return;
+    }
+    spawn(cmd, args, { detached: true, stdio: "ignore" }).unref();
+  } catch { /* best-effort only */ }
+}
 
 // ---------------------------------------------------------------------------
 // ccusage invocation — prefer a ccusage on PATH, else `npx -y <spec>`.
@@ -171,6 +196,11 @@ function modeGate() {
       `Month-to-date: ${usd(mtd)} of ${usd(MONTHLY_TARGET)} target (${mpct.toFixed(0)}%).\n` +
       `To continue anyway today: create the file ${overrideFile}  (or set COST_GUARD_OVERRIDE=1).\n` +
       `To change limits or switch to warn-only, reconfigure the cost-guard plugin (hard_block=false).`;
+    notifyOS(
+      "Cost Guard — Blocked",
+      `Budget reached, prompt blocked. Today: ${usd(today)} of ${usd(DAILY_BUDGET)} daily budget (${dpct.toFixed(0)}%). ` +
+        `Month-to-date: ${usd(mtd)} of ${usd(MONTHLY_TARGET)} target (${mpct.toFixed(0)}%).`
+    );
     process.stderr.write(reason);
     return process.exit(2);
   }

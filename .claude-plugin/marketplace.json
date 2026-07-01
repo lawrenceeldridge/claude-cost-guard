@@ -11,7 +11,7 @@
       "name": "cost-guard",
       "source": "./plugins/cost-guard",
       "description": "Daily and monthly spend guard for Claude Code: blocks over-budget prompts and shows a live burn status line, powered by ccusage.",
-      "version": "0.6.1"
+      "version": "0.6.2"
     }
   ]
 }
