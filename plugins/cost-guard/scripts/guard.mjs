@@ -14,28 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-
-// ---------------------------------------------------------------------------
-// Configuration — from plugin userConfig (CLAUDE_PLUGIN_OPTION_*), with
-// COST_GUARD_* overrides for standalone use, and safe defaults.
-// ---------------------------------------------------------------------------
-function opt(key, def) {
-  const K = key.toUpperCase();
-  const env = process.env;
-  const v =
-    env[`CLAUDE_PLUGIN_OPTION_${key}`] ??
-    env[`CLAUDE_PLUGIN_OPTION_${K}`] ??
-    env[`COST_GUARD_${K}`];
-  return v === undefined || v === "" ? def : v;
-}
-const MONTHLY_TARGET = num(opt("monthly_target", 4000), 4000);
-const WORKING_DAYS = num(opt("working_days_per_month", 21), 21);
-const WARN_PCT = num(opt("warn_pct", 80), 80);
-const HARD_BLOCK = String(opt("hard_block", "true")).toLowerCase() !== "false";
-const CACHE_TTL = num(opt("cache_ttl", 120), 120);
-const CCUSAGE_SPEC = opt("ccusage_spec", "ccusage@latest"); // pin here for reproducibility
-
-const DAILY_BUDGET = WORKING_DAYS > 0 ? MONTHLY_TARGET / WORKING_DAYS : MONTHLY_TARGET;
+import { fileURLToPath } from "node:url";
 
 function num(v, fallback) {
   const n = Number(v);
@@ -43,12 +22,77 @@ function num(v, fallback) {
 }
 
 // ---------------------------------------------------------------------------
-// Paths — writable state lives in CLAUDE_PLUGIN_DATA (falls back to a temp dir
-// when run outside the plugin, e.g. during tests). Never write to PLUGIN_ROOT.
+// Paths — writable state lives in the plugin data dir. Plugin hooks and slash
+// commands get it as CLAUDE_PLUGIN_DATA; a user-wired statusLine command gets
+// NEITHER that var NOR CLAUDE_PLUGIN_OPTION_* (Claude Code does not inject
+// plugin env into a manually-configured statusLine). So when the env var is
+// absent we derive the same dir from this script's own install path
+// (.../plugins/cache/<marketplace>/<plugin>/<version>/scripts), which lets the
+// statusline share the gate's cache and config. Falls back to a temp dir when
+// run standalone (e.g. tests). Never write to PLUGIN_ROOT.
 // ---------------------------------------------------------------------------
-const DATA_DIR = process.env.CLAUDE_PLUGIN_DATA || path.join(os.tmpdir(), "cost-guard");
+function resolveDataDir() {
+  if (process.env.CLAUDE_PLUGIN_DATA) return process.env.CLAUDE_PLUGIN_DATA;
+  try {
+    const parts = path.dirname(fileURLToPath(import.meta.url)).split(path.sep);
+    const ci = parts.lastIndexOf("cache");
+    if (ci > 0 && parts[ci - 1] === "plugins" && parts.length >= ci + 4) {
+      const [marketplace, plugin] = [parts[ci + 1], parts[ci + 2]];
+      return path.join(parts.slice(0, ci).join(path.sep), "data", `${marketplace}-${plugin}`);
+    }
+  } catch { /* fall through to temp dir */ }
+  return path.join(os.tmpdir(), "cost-guard");
+}
+const DATA_DIR = resolveDataDir();
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
 const CACHE_FILE = path.join(DATA_DIR, "cache.json");
+const CONFIG_FILE = path.join(DATA_DIR, "config.json");
+
+// The gate runs as the plugin, so it alone sees the authoritative
+// CLAUDE_PLUGIN_OPTION_* budget. It persists that resolved config here so the
+// option-blind statusline reads the same numbers instead of silently dropping
+// to the built-in defaults (the cause of gate/statusline budget drift).
+let PERSISTED = {};
+try { PERSISTED = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) || {}; } catch { /* none yet */ }
+
+// ---------------------------------------------------------------------------
+// Configuration — plugin userConfig (CLAUDE_PLUGIN_OPTION_*), then COST_GUARD_*
+// overrides for standalone use, then the gate's last-persisted config (so an
+// option-blind statusline matches the gate), then safe defaults.
+// ---------------------------------------------------------------------------
+function opt(key, def) {
+  const K = key.toUpperCase();
+  const env = process.env;
+  const v =
+    env[`CLAUDE_PLUGIN_OPTION_${key}`] ??
+    env[`CLAUDE_PLUGIN_OPTION_${K}`] ??
+    env[`COST_GUARD_${K}`] ??
+    PERSISTED[key];
+  return v === undefined || v === "" ? def : v;
+}
+const MONTHLY_TARGET = num(opt("monthly_target", 4000), 4000);
+const WORKING_DAYS = num(opt("working_days_per_month", 21), 21);
+const WARN_PCT = num(opt("warn_pct", 80), 80);
+const HARD_BLOCK = String(opt("hard_block", "true")).toLowerCase() !== "false";
+// Floor on how fresh the statusline can ever be: a shorter statusLine
+// `refreshInterval` (settings.json) just re-renders these same cached figures.
+const CACHE_TTL = num(opt("cache_ttl", 120), 120);
+const CCUSAGE_SPEC = opt("ccusage_spec", "ccusage@latest"); // pin here for reproducibility
+
+const DAILY_BUDGET = WORKING_DAYS > 0 ? MONTHLY_TARGET / WORKING_DAYS : MONTHLY_TARGET;
+
+// Snapshot the gate's authoritative config so the statusline can recover it.
+function persistConfig() {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify({
+      monthly_target: MONTHLY_TARGET,
+      working_days_per_month: WORKING_DAYS,
+      warn_pct: WARN_PCT,
+      hard_block: HARD_BLOCK,
+      cache_ttl: CACHE_TTL,
+    }));
+  } catch { /* best-effort — never block on persistence */ }
+}
 
 // ---------------------------------------------------------------------------
 // Dates — local time, no external `date` binary.
@@ -157,6 +201,7 @@ function fmtDur(ms) {
 // Modes
 // ---------------------------------------------------------------------------
 function modeGate() {
+  persistConfig(); // authoritative path — keep the statusline's fallback fresh
   const overrideFile = path.join(DATA_DIR, `.override-${TODAY_ISO}`);
   if (process.env.COST_GUARD_OVERRIDE === "1" || safeExists(overrideFile)) return allow();
 
