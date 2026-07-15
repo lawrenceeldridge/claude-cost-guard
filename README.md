@@ -53,6 +53,8 @@ Claude Code plugins **cannot set the main status line** (a plugin may only contr
 
 The installed path is `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/scripts/guard.mjs` — it contains the version, so update it when the plugin updates. Run `claude plugin details cost-guard` to see the current path. The budget-block hook works with no manual step; only the status line is opt-in.
 
+Your `/plugin` budget reaches the status line automatically. A manually-wired `statusLine` command does not receive the plugin's `CLAUDE_PLUGIN_OPTION_*` config (Claude Code injects those only into plugin hooks/commands), so on its own it would fall back to the built-in defaults. To avoid that drift, the budget-block hook — which *does* see your config — writes the resolved budget to `config.json` in the plugin data dir, and the status line reads it. Result: after the first prompt of a session the status line matches your `/plugin` settings, with no need to mirror them into `env`. (Precedence is unchanged: `CLAUDE_PLUGIN_OPTION_*` → `COST_GUARD_*` env → persisted `config.json` → defaults.)
+
 ## When you are blocked
 
 The prompt is refused with a message that tells you where you stand. To keep working the same day:
